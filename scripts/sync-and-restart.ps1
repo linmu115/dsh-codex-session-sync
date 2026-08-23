@@ -1,6 +1,18 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$EacRoot,
+  [string]$DshRoot,
+
+  [Parameter(Mandatory = $true)]
+  [string]$DshHome,
+
+  [Parameter(Mandatory = $true)]
+  [string]$HealthUrl,
+
+  [Parameter(Mandatory = $true)]
+  [string]$NodeExecutable,
+
+  [Parameter(Mandatory = $true)]
+  [int]$DshProcessId,
 
   [ValidateRange(0, 30)]
   [int]$DelaySeconds = 2
@@ -9,12 +21,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$eacRootPath = [System.IO.Path]::GetFullPath($EacRoot)
-$eacExe = Join-Path $eacRootPath 'Deepseek Harness EAC.exe'
-$nodeExe = Join-Path $eacRootPath 'resources\node\node.exe'
+$dshRootPath = [System.IO.Path]::GetFullPath($DshRoot)
+$dshHomePath = [System.IO.Path]::GetFullPath($DshHome)
+$nodePath = [System.IO.Path]::GetFullPath($NodeExecutable)
+$startScript = Join-Path $dshRootPath 'Start-Official-DSH.ps1'
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 $syncScript = Join-Path $pluginRoot 'sync\sync.mjs'
-$logRoot = Join-Path $env:USERPROFILE '.dsh\codex-oneway-sync\plugin-runs'
+$logRoot = Join-Path $dshHomePath 'codex-oneway-sync\plugin-runs'
 $logPath = Join-Path $logRoot ("sync-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
 
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
@@ -33,69 +46,48 @@ try {
   if (-not $mutexAcquired) {
     throw 'Another Codex session synchronization is already running.'
   }
-  if (-not (Test-Path -LiteralPath $eacExe)) {
-    throw "Cannot find EAC executable: $eacExe"
-  }
-  if (-not (Test-Path -LiteralPath $nodeExe)) {
-    throw "Cannot find bundled Node executable: $nodeExe"
-  }
-  if (-not (Test-Path -LiteralPath $syncScript)) {
-    throw "Cannot find bundled synchronizer: $syncScript"
+  foreach ($required in @($nodePath, $startScript, $syncScript)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+      throw "Cannot find required official DSH resource: $required"
+    }
   }
 
   if ($DelaySeconds -gt 0) {
     Start-Sleep -Seconds $DelaySeconds
   }
 
-  Write-Host 'Stopping EAC to avoid concurrent session writes...'
-  $eacProcesses = @(Get-Process | Where-Object {
-    try {
-      $_.Path -and [System.IO.Path]::GetFullPath($_.Path).StartsWith($eacRootPath, [System.StringComparison]::OrdinalIgnoreCase)
-    } catch {
-      $false
-    }
-  })
-
-  foreach ($process in @($eacProcesses | Where-Object { $_.ProcessName -eq 'Deepseek Harness EAC' })) {
-    try { [void]$process.CloseMainWindow() } catch { }
+  $dshProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $DshProcessId" -ErrorAction SilentlyContinue
+  if (-not $dshProcess -or $dshProcess.CommandLine -notlike "*$dshRootPath*") {
+    throw "PID $DshProcessId is not the configured official DSH process."
   }
-  Start-Sleep -Seconds 2
 
-  $remaining = @(Get-Process | Where-Object {
-    try {
-      $_.Path -and [System.IO.Path]::GetFullPath($_.Path).StartsWith($eacRootPath, [System.StringComparison]::OrdinalIgnoreCase)
-    } catch {
-      $false
-    }
-  })
-  if ($remaining.Count -gt 0) {
-    $remaining | Stop-Process -Force
-    Start-Sleep -Milliseconds 500
-  }
+  Write-Host 'Stopping official DSH to avoid concurrent session writes...'
+  Stop-Process -Id $DshProcessId -Force
+  Start-Sleep -Milliseconds 500
 
   $syncExitCode = 1
   $syncError = $null
   $restartError = $null
   try {
-    Write-Host 'Syncing new and updated Codex sessions to EAC...'
+    Write-Host 'Syncing new and updated Codex sessions into the official DSH home...'
     $env:NODE_NO_WARNINGS = '1'
-    & $nodeExe $syncScript --apply --quiet --prune-redundant-branches
+    & $nodePath $syncScript --apply --quiet --prune-redundant-branches --dsh-home $dshHomePath
     $syncExitCode = $LASTEXITCODE
   } catch {
     $syncError = $_
   } finally {
-    Write-Host 'Restarting EAC...'
+    Write-Host 'Restarting official DSH...'
     try {
-      $eacProcess = Start-Process -FilePath $eacExe -WorkingDirectory $eacRootPath -PassThru
-      $deadline = [DateTime]::UtcNow.AddSeconds(120)
+      & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $startScript -NoOpen
+      if ($LASTEXITCODE -ne 0) {
+        throw "Official DSH launcher exited with code $LASTEXITCODE."
+      }
+      $deadline = [DateTime]::UtcNow.AddSeconds(60)
       $healthy = $false
       while ([DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 500
-        if ($eacProcess.HasExited) {
-          throw "EAC exited before its web service became ready (exit code $($eacProcess.ExitCode))."
-        }
         try {
-          $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:51882/' -TimeoutSec 2
+          $response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 2
           if ($response.StatusCode -eq 200) {
             $healthy = $true
             break
@@ -103,29 +95,22 @@ try {
         } catch { }
       }
       if (-not $healthy) {
-        throw 'EAC did not become healthy at http://127.0.0.1:51882/ within 120 seconds.'
+        throw "Official DSH did not become healthy at $HealthUrl within 60 seconds."
       }
     } catch {
       $restartError = $_
     }
   }
 
-  if ($null -ne $syncError) {
-    throw $syncError
-  }
+  if ($null -ne $syncError) { throw $syncError }
   if ($syncExitCode -ne 0) {
-    throw "Sync did not complete (exit code $syncExitCode). EAC was restarted and original data remains in backup."
+    throw "Sync did not complete (exit code $syncExitCode). Official DSH was restarted and the synchronizer backup was retained."
   }
-  if ($null -ne $restartError) {
-    throw $restartError
-  }
+  if ($null -ne $restartError) { throw $restartError }
 
-  Write-Host 'Sync complete. EAC was restarted and passed the health check.'
+  Write-Host 'Sync complete. Official DSH restarted and passed the health check.'
 } finally {
-  if ($mutexAcquired) {
-    $mutex.ReleaseMutex()
-  }
+  if ($mutexAcquired) { $mutex.ReleaseMutex() }
   $mutex.Dispose()
   Stop-Transcript | Out-Null
 }
-

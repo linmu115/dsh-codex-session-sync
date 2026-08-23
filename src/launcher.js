@@ -7,9 +7,13 @@ export function resolveHelperPath() {
   return fileURLToPath(new URL('../scripts/sync-and-restart.ps1', import.meta.url))
 }
 
-export function buildPowerShellArgs({ helperPath, eacRoot, delaySeconds }) {
+export function buildPowerShellArgs({ helperPath, dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds }) {
   if (!helperPath) throw new Error('helperPath is required')
-  if (!eacRoot) throw new Error('eacRoot is required')
+  if (!dshRoot) throw new Error('dshRoot is required')
+  if (!dshHome) throw new Error('dshHome is required')
+  if (!healthUrl) throw new Error('healthUrl is required')
+  if (!nodeExecutable) throw new Error('nodeExecutable is required')
+  if (!Number.isInteger(dshProcessId) || dshProcessId < 1) throw new Error('dshProcessId is required')
   if (!Number.isInteger(delaySeconds) || delaySeconds < 0 || delaySeconds > 30) {
     throw new Error('delaySeconds must be an integer between 0 and 30')
   }
@@ -21,8 +25,16 @@ export function buildPowerShellArgs({ helperPath, eacRoot, delaySeconds }) {
     'Bypass',
     '-File',
     helperPath,
-    '-EacRoot',
-    eacRoot,
+    '-DshRoot',
+    dshRoot,
+    '-DshHome',
+    dshHome,
+    '-HealthUrl',
+    healthUrl,
+    '-NodeExecutable',
+    nodeExecutable,
+    '-DshProcessId',
+    String(dshProcessId),
     '-DelaySeconds',
     String(delaySeconds),
   ]
@@ -36,7 +48,7 @@ export function createSyncLauncher({
 } = {}) {
   let lastLaunchAt = Number.NEGATIVE_INFINITY
 
-  return function launchSync({ eacRoot, delaySeconds = 2 }) {
+  return function launchSync({ dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds = 2 }) {
     if (platform !== 'win32') return { launched: false, reason: 'unsupported-platform' }
 
     const launchedAt = now()
@@ -45,7 +57,7 @@ export function createSyncLauncher({
     }
 
     const helperPath = resolveHelperPath()
-    const args = buildPowerShellArgs({ helperPath, eacRoot, delaySeconds })
+    const args = buildPowerShellArgs({ helperPath, dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds })
     const child = spawnImpl('powershell.exe', args, {
       detached: true,
       stdio: 'ignore',
@@ -56,4 +68,3 @@ export function createSyncLauncher({
     return { launched: true, pid: child.pid }
   }
 }
-

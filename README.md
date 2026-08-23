@@ -2,21 +2,22 @@
 
 DSH plugin wrapper for the local, UUID-aware Codex-to-DSH session synchronizer.
 
-The plugin adds a `/codex-sync` command. An explicit command invocation launches a detached PowerShell helper, which safely stops EAC, synchronizes Codex session changes, restarts EAC, and checks the local web service. Loading or installing the plugin never starts a synchronization.
+The plugin adds a `/codex-sync` command. An explicit invocation launches a detached PowerShell helper, stops only the current official DSH process, synchronizes Codex changes into the configured `DSH_HOME`, restarts the official launcher, and checks the loopback Web UI. Loading or installing the plugin never starts synchronization.
 
 ## Safety boundary
 
 - The existing session synchronizer is bundled with the plugin and keeps its backup behavior.
 - A short command cooldown and a system-wide helper mutex prevent overlapping runs.
-- The helper log is written below `~/.dsh/codex-oneway-sync/plugin-runs`.
-- The original double-click synchronization entry remains available.
+- The helper log is written below `<DSH_HOME>/codex-oneway-sync/plugin-runs`.
+- The process ID and command line are validated before DSH is stopped.
+- EAC is neither detected nor controlled.
 
 ## Usage
 
-Install into the EAC desktop profile with the DSH CLI:
+Install into the official Web profile with the DSH CLI:
 
 ```powershell
-dsh plugin --profile web-desktop add D:\AI\DSH-Plugin-Repositories\dsh-codex-session-sync
+dsh plugin --profile web add D:\AI\DSH-Plugin-Repositories\dsh-codex-session-sync
 ```
 
 Then enter the following command in a DSH chat:
@@ -25,11 +26,13 @@ Then enter the following command in a DSH chat:
 /codex-sync
 ```
 
-The command accepts no arguments. It waits briefly so the command result can reach the browser, then EAC closes and restarts. A second invocation during the launch window is rejected, and the detached helper also holds a named mutex for the complete stop-sync-restart lifecycle.
+The command accepts no arguments. It waits briefly so the command result can reach the browser, then official DSH restarts around the session write. A second invocation during the launch window is rejected, and the detached helper holds a named mutex for the complete stop-sync-restart lifecycle.
 
 ## Configuration
 
-The bundle patch provides the current EAC installation root and a two-second launch delay. `eacRoot` can be changed in a profile override if EAC moves. The plugin also accepts `DSH_EAC_ROOT` when no configured root is supplied.
+The bundle patch provides `dshRoot`, `dshHome`, `healthUrl`, and a two-second launch delay. When omitted, runtime values come from `DSH_INSTALL_ROOT`, `DSH_HOME`, and `DSH_WEB_URL`; the official launcher exports these variables. `dshRoot` must contain `Start-Official-DSH.ps1`.
+
+The synchronizer retains a few historical `EAC` labels in its ledger and branch IDs so existing imported-session metadata remains readable. Those labels are data-format compatibility only and do not call or inspect EAC.
 
 ## Development
 

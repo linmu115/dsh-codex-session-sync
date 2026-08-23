@@ -2,6 +2,7 @@
     - id: codex-session-sync
       name: dsh-codex-session-sync
       config:
-        eacRoot: 'D:\AI\Deepseek-Harness-EAC\Deepseek Harness EAC'
+        dshRoot: 'D:\AI\DeepSeek-Harness'
+        dshHome: 'D:\AI\DeepSeek-Harness\home'
+        healthUrl: 'http://127.0.0.1:3080/'
         delaySeconds: 2
-

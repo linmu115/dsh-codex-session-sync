@@ -1,7 +1,7 @@
 {
   "name": "dsh-codex-session-sync",
-  "version": "0.1.1",
-  "description": "Run the local Codex-to-DSH session synchronizer from a DSH slash command.",
+  "version": "0.2.0",
+  "description": "Synchronize local Codex sessions into an official DSH home from a DSH slash command.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
