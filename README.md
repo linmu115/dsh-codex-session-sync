@@ -10,7 +10,7 @@ The plugin adds a `/codex-sync` command. An explicit invocation launches a detac
 - A short command cooldown and a system-wide helper mutex prevent overlapping runs.
 - The helper log is written below `<DSH_HOME>/codex-oneway-sync/plugin-runs`.
 - The process ID and command line are validated before DSH is stopped.
-- EAC is neither detected nor controlled.
+- The plugin is independent of any desktop shell and only controls the configured official DSH process.
 
 ## Usage
 
@@ -32,7 +32,7 @@ The command accepts no arguments. It waits briefly so the command result can rea
 
 The bundle patch provides `dshRoot`, `dshHome`, `healthUrl`, and a two-second launch delay. When omitted, runtime values come from `DSH_INSTALL_ROOT`, `DSH_HOME`, and `DSH_WEB_URL`; the official launcher exports these variables. `dshRoot` must contain `Start-Official-DSH.ps1`.
 
-The synchronizer retains a few historical `EAC` labels in its ledger and branch IDs so existing imported-session metadata remains readable. Those labels are data-format compatibility only and do not call or inspect EAC.
+The synchronizer uses only DSH-neutral ledger fields and branch IDs. It does not preserve desktop-shell compatibility labels.
 
 ## Development
 

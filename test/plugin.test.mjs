@@ -143,7 +143,7 @@ test('detached helper owns the stop-sync-restart lifecycle and a named mutex', a
   assert.match(helper, /--apply --quiet --prune-redundant-branches/)
   assert.match(helper, /Restarting official DSH/)
   assert.match(helper, /--dsh-home/)
-  assert.doesNotMatch(helper, /EacRoot|Deepseek Harness EAC|51882/i)
+  assert.doesNotMatch(helper, /51882|desktop shell/i)
 })
 
 test('package does not install shadow copies of DSH host services', async () => {

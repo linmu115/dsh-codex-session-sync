@@ -138,11 +138,11 @@ export function scanZstdFrames(buffer, maxFrames = Number.POSITIVE_INFINITY) {
 
 export function decodeArtifact(buffer) {
   const frames = scanZstdFrames(buffer)
-  if (frames.length < 1) throw new Error('空的 EAC 会话日志')
+  if (frames.length < 1) throw new Error('空的会话日志')
   const plain = Buffer.concat(frames.map(({ start, end }) => zstdDecompressSync(buffer.subarray(start, end))))
   const lines = plain.toString('utf8').trimEnd().split('\n')
   const header = JSON.parse(lines.shift())
-  if (header.type !== 'session' || typeof header.id !== 'string') throw new Error('EAC 会话头无效')
+  if (header.type !== 'session' || typeof header.id !== 'string') throw new Error('会话头无效')
   return { header, events: lines.filter(Boolean).map((line) => JSON.parse(line)), frameCount: frames.length }
 }
 
@@ -150,7 +150,7 @@ function decodeHeader(buffer) {
   const [frame] = scanZstdFrames(buffer, 1)
   const line = zstdDecompressSync(buffer.subarray(frame.start, frame.end)).toString('utf8').trimEnd()
   const header = JSON.parse(line)
-  if (header.type !== 'session' || typeof header.id !== 'string') throw new Error('EAC 会话头无效')
+  if (header.type !== 'session' || typeof header.id !== 'string') throw new Error('会话头无效')
   return header
 }
 
@@ -247,7 +247,7 @@ export function hasOnlyBenignRuntimeTail(events, importedEventCount) {
     .every((event) => event?.type === 'session/end-seed')
 }
 
-export function hasNativeEacDialogue(events, sourceId) {
+export function hasNativeDialogue(events, sourceId) {
   if (!Array.isArray(events) || typeof sourceId !== 'string' || !sourceId) return false
   const importedPrefix = `import:${sourceId}:`
   for (const event of events) {
@@ -326,9 +326,9 @@ function branchStamp(date = new Date()) {
 }
 
 function makeBranch(decoded, canonicalId, fallbackTitle) {
-  const id = `${canonicalId}--eac-branch-${branchStamp()}-${randomBytes(2).toString('hex')}`
+  const id = `${canonicalId}--branch-${branchStamp()}-${randomBytes(2).toString('hex')}`
   const baseTitle = latestTitle(decoded.events) || fallbackTitle || canonicalId
-  const events = appendTitle(decoded.events, `${baseTitle} · EAC 分支 ${branchStamp()}`)
+  const events = appendTitle(decoded.events, `${baseTitle} · 分支 ${branchStamp()}`)
   return {
     id,
     header: { ...decoded.header, id },
@@ -446,7 +446,7 @@ async function prepareWorkspaceRebuild(
   const document = await readJson(path, null)
   const workspaces = document?.tables?.workspaces
   if (!document?.global || !workspaces || typeof workspaces !== 'object') {
-    throw new Error(`EAC workspace registry has an unsupported shape: ${path}`)
+    throw new Error(`workspace registry has an unsupported shape: ${path}`)
   }
 
   const actual = await scanDshSessions(join(dshHome, 'sessions'))
@@ -665,7 +665,7 @@ async function scanDshSessions(sessionsRoot) {
       if (!existsSync(path)) continue
       const buffer = await readFile(path)
       const header = decodeHeader(buffer)
-      if (byId.has(header.id)) throw new Error(`EAC 中存在重复会话 ID：${header.id}`)
+      if (byId.has(header.id)) throw new Error(`存在重复会话 ID：${header.id}`)
       byId.set(header.id, { path, dir: dirname(path), header, hash: null })
     }
   }
@@ -681,7 +681,7 @@ async function refreshProjectionCache(dshHome, backupRoot, excludedSessionIds = 
   })
   const records = document?.tables?.sessions
   if (!records || typeof records !== 'object' || Array.isArray(records)) {
-    throw new Error(`EAC projection cache has an unsupported shape: ${path}`)
+    throw new Error(`projection cache has an unsupported shape: ${path}`)
   }
 
   const actual = await scanDshSessions(join(dshHome, 'sessions'))
@@ -864,12 +864,12 @@ async function pruneRedundantBranches(ledger, sessionsRoot, backupRoot) {
       readFile(branch.path).then(decodeArtifact),
       readFile(canonical.path).then(decodeArtifact),
     ])
-    const importedOnly = !hasNativeEacDialogue(branchDecoded.events, record.sourceId)
+    const importedOnly = !hasNativeDialogue(branchDecoded.events, record.sourceId)
     if (!importedOnly && !isRedundantBranch(branchDecoded.events, canonicalDecoded.events)) {
       survivors.push(record)
       continue
     }
-    await moveDirToBackup(branch.dir, backupRoot, 'redundant-eac-branches')
+    await moveDirToBackup(branch.dir, backupRoot, 'redundant-branches')
     pruned++
   }
   ledger.branches = survivors
@@ -937,7 +937,7 @@ async function execute(options) {
     const canonicalSession = dshSessions.get(item.id)
     try {
       if (item.bogus) {
-        log(`${prefix}：测试/审批会话，${options.apply ? '移出 EAC' : '将移出 EAC'}`)
+        log(`${prefix}：测试/审批会话，${options.apply ? '移出同步结果' : '将移出同步结果'}`)
         if (options.apply) {
           if (legacySession) await moveDirToBackup(legacySession.dir, backupRoot, 'deleted-test-sessions')
           if (canonicalSession) await moveDirToBackup(canonicalSession.dir, backupRoot, 'deleted-test-sessions')
@@ -984,7 +984,7 @@ async function execute(options) {
         legacyDecoded = decodeArtifact(await readFile(legacySession.path))
         if (!item.title) item.title = titleFor(item.id, metadata, indexTitles, firstUserText(legacyDecoded.events))
         if (isApprovalTranscript(firstUserText(legacyDecoded.events))) {
-          log(`${prefix}：测试/审批会话，${options.apply ? '移出 EAC' : '将移出 EAC'}`)
+          log(`${prefix}：测试/审批会话，${options.apply ? '移出同步结果' : '将移出同步结果'}`)
           if (options.apply) await moveDirToBackup(legacySession.dir, backupRoot, 'deleted-test-sessions')
           counters.testSessionsRemoved++
           delete nextLedger.sessions[item.id]
@@ -1010,7 +1010,7 @@ async function execute(options) {
         })
         if (!item.title) item.title = titleFor(item.id, metadata, indexTitles, converted.title)
         if (isApprovalTranscript(firstUserText(converted.events))) {
-          log(`${prefix}：测试/审批会话，${options.apply ? '移出 EAC' : '将移出 EAC'}`)
+          log(`${prefix}：测试/审批会话，${options.apply ? '移出同步结果' : '将移出同步结果'}`)
           if (options.apply) {
             if (legacySession) await moveDirToBackup(legacySession.dir, backupRoot, 'deleted-test-sessions')
             if (canonicalSession) await moveDirToBackup(canonicalSession.dir, backupRoot, 'deleted-test-sessions')
@@ -1037,14 +1037,14 @@ async function execute(options) {
       let conflictDecoded = null
       if (canonicalSession && (!previous || !dshLooksUnchanged)) {
         const existing = decodeArtifact(await readFile(canonicalSession.path))
-        if (hasNativeEacDialogue(existing.events, item.id)) conflictDecoded = existing
+        if (hasNativeDialogue(existing.events, item.id)) conflictDecoded = existing
       } else if (legacyModified) {
         conflictDecoded = legacyDecoded
       }
 
       if (!options.apply) {
         const action = canonicalSession ? '更新' : legacySession ? '迁移' : '新建'
-        log(`${prefix}：将${action}${conflictDecoded ? '，并保留 EAC 分支' : ''}；标题《${canonical.title}》`)
+        log(`${prefix}：将${action}${conflictDecoded ? '，并保留分支' : ''}；标题《${canonical.title}》`)
         if (conflictDecoded) counters.branched++
         if (legacySession) counters.migrated++
         else if (canonicalSession) counters.updated++
@@ -1086,7 +1086,7 @@ async function execute(options) {
       if (legacySession) counters.migrated++
       else if (canonicalSession) counters.updated++
       else counters.created++
-      log(`${prefix}：完成；标题《${canonical.title}》${conflictDecoded ? '；已保留 EAC 分支' : ''}`)
+      log(`${prefix}：完成；标题《${canonical.title}》${conflictDecoded ? '；已保留分支' : ''}`)
     } catch (error) {
       counters.failed++
       console.error(`${prefix}：失败：${error.message}`)
@@ -1101,7 +1101,7 @@ async function execute(options) {
         backupRoot,
       )
     }
-    const archivedEacSessions = await archiveExcludedCodexSessions(
+    const archivedSessions = await archiveExcludedCodexSessions(
       dshSessions,
       metadata,
       excludedWorkspacePaths,
@@ -1128,7 +1128,7 @@ async function execute(options) {
     )
     const projectionCache = await refreshProjectionCache(dshHome, backupRoot, archivedSessionIds)
     nextLedger.lastRun = { runId, finishedAt: Date.now(), counters }
-    nextLedger.lastRun.archivedEacSessions = archivedEacSessions
+    nextLedger.lastRun.archivedSessions = archivedSessions
     nextLedger.lastRun.relocatedInvalidCwds = relocatedInvalidCwds
     nextLedger.lastRun.workspaceRegistry = workspace
     nextLedger.lastRun.projectionCache = projectionCache

@@ -16,7 +16,7 @@
 - helper 校验 PID 的命令行属于配置的官方 DSH 根目录，只停止该 DSH 进程。
 - 同步器显式接收 `--dsh-home`，完成后调用 `Start-Official-DSH.ps1 -NoOpen` 并验证 Web UI。
 - EAC 不再被探测、停止、启动或用于提供 Node。
-- 历史 ledger 中带 `EAC` 的字段与分支 ID 暂时保留，仅用于兼容已有同步数据。
+- 不再保留历史桌面壳兼容字段、分支 ID 或日志标签；同步器统一使用 DSH 中性的字段和分支命名。
 
 ## 回退
 

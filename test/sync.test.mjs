@@ -9,7 +9,7 @@ import {
   encodeArtifact,
   execute,
   hasOnlyBenignRuntimeTail,
-  hasNativeEacDialogue,
+  hasNativeDialogue,
   isApprovalTranscript,
   isRedundantBranch,
   projectKey,
@@ -38,7 +38,7 @@ test('multi-frame artifact codec preserves header and events', () => {
   assert.equal(decoded.frameCount, 2)
 })
 
-test('runtime end-seed markers do not count as an EAC conversation divergence', () => {
+test('runtime end-seed markers do not count as a runtime conversation divergence', () => {
   const imported = [{ type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } }]
   assert.equal(hasOnlyBenignRuntimeTail([
     ...imported,
@@ -51,29 +51,29 @@ test('runtime end-seed markers do not count as an EAC conversation divergence', 
   ], imported.length), false)
 })
 
-test('same-ID imported dialogue is not an EAC edit, while native messages are', () => {
+test('same-ID imported dialogue is not a native edit, while native messages are', () => {
   const imported = [
     { type: 'user/message', data: { id: `import:${NODE_ID}:u1` } },
     { type: 'assistant/message', data: { message: { id: `import:${NODE_ID}:a1:1` } } },
   ]
-  assert.equal(hasNativeEacDialogue(imported, NODE_ID), false)
-  assert.equal(hasNativeEacDialogue([
+  assert.equal(hasNativeDialogue(imported, NODE_ID), false)
+  assert.equal(hasNativeDialogue([
     ...imported,
-    { type: 'user/message', data: { id: 'eac-local-message' } },
+    { type: 'user/message', data: { id: 'local-message' } },
   ], NODE_ID), true)
 })
 
-test('redundant branches are old prefixes while real EAC dialogue is preserved', () => {
+test('redundant branches are old prefixes while real native dialogue is preserved', () => {
   const oldCore = [{ type: 'user/message', seq: 0, time: 1, data: { content: [] } }]
   const newCore = [...oldCore, { type: 'assistant/message', seq: 1, time: 2, data: { message: {} } }]
   const managedTail = [
-    { type: 'session/title', seq: 2, time: 3, data: { title: 'EAC 分支' } },
+    { type: 'session/title', seq: 2, time: 3, data: { title: '分支' } },
     { type: 'session/end-seed', seq: 3, time: 4, data: {} },
   ]
   assert.equal(isRedundantBranch([...oldCore, ...managedTail], [...newCore, ...managedTail]), true)
   assert.equal(isRedundantBranch([
     ...oldCore,
-    { type: 'user/message', seq: 1, time: 5, data: { content: [{ type: 'text', text: 'EAC 新对话' }] } },
+    { type: 'user/message', seq: 1, time: 5, data: { content: [{ type: 'text', text: '新的本地对话' }] } },
     ...managedTail,
   ], [...newCore, ...managedTail]), false)
 
@@ -90,7 +90,7 @@ test('redundant branches are old prefixes while real EAC dialogue is preserved',
     ...managedTail,
   ]
   assert.equal(isRedundantBranch(oldFormat, newFormat), true)
-  oldFormat[1].data.message.content[0].text = 'EAC 中不同的回答'
+  oldFormat[1].data.message.content[0].text = '本地不同的回答'
   assert.equal(isRedundantBranch(oldFormat, newFormat), false)
 })
 
@@ -114,7 +114,7 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
         'workspace-1': {
           path: cwd,
           title: 'workspace',
-          sessionIds: [nativeId, `import-${NODE_ID}`, `${NODE_ID}--eac-branch-stale`],
+          sessionIds: [nativeId, `import-${NODE_ID}`, `${NODE_ID}--branch-stale`],
           createdAt: '2026-08-18T10:00:00.000Z',
           updatedAt: '2026-08-18T10:00:00.000Z',
         },
@@ -138,7 +138,7 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
   const nativeHeader = { version: 0, id: nativeId, createdAt: 50, cwd, delegationDepth: 0 }
   const nativeEvents = [
     { type: 'turn/start', seq: 0, time: 50, data: { turn: 1 } },
-    { type: 'session/title', seq: 1, time: 51, data: { title: 'EAC 原生会话', messageSeqs: [], source: { kind: 'user' } } },
+    { type: 'session/title', seq: 1, time: 51, data: { title: '原生会话', messageSeqs: [], source: { kind: 'user' } } },
   ]
   const nativePath = join(dshHome, 'sessions', projectKey(cwd), nativeId, 'session.jsonl.zstd')
   await mkdir(join(dshHome, 'sessions', projectKey(cwd), nativeId), { recursive: true })
@@ -217,20 +217,20 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
   assert.deepEqual(workspace.global.workspaceIds, ['workspace-1'])
   assert.equal(workspace.tables.workspaces['workspace-archived'], undefined)
   assert.equal(workspace.tables.workspaces['workspace-excluded'], undefined)
-  const archivedEacPath = join(
+  const archivedSessionPath = join(
     dshHome,
     'codex-oneway-sync',
     'archived-sessions',
     projectKey(archivedCwd),
     ARCHIVED_ID,
   )
-  assert.equal((await readdir(archivedEacPath)).includes('session.jsonl.zstd'), true)
+  assert.equal((await readdir(archivedSessionPath)).includes('session.jsonl.zstd'), true)
   assert.equal((await readdir(join(dshHome, 'sessions', projectKey(excludedCwd), EXCLUDED_ID))).includes('session.jsonl.zstd'), true)
   let projectionCache = JSON.parse(await readFile(join(dshHome, 'storages', 'session_projcache.json'), 'utf8'))
   assert.equal(projectionCache.tables.sessions[NODE_ID].rows.title.val, 'Codex 精确标题 · 甲')
   assert.equal(projectionCache.tables.sessions[NODE_ID].rows.title.ver, 1)
   assert.equal(projectionCache.tables.sessions[NODE_ID].rows.sessionListMetadata.val.blank, false)
-  assert.equal(projectionCache.tables.sessions[nativeId].rows.title.val, 'EAC 原生会话')
+  assert.equal(projectionCache.tables.sessions[nativeId].rows.title.val, '原生会话')
   assert.deepEqual(projectionCache.tables.sessions[nativeId].rows.goal, { ver: 4, seq: 1, val: null })
   assert.equal(projectionCache.tables.sessions.stale, undefined)
   assert.equal(projectionCache.tables.sessions[ARCHIVED_ID], undefined)
@@ -253,7 +253,7 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
     type: 'session/title',
     seq: canonical.events.at(-1).seq + 1,
     time: Date.now(),
-    data: { title: 'EAC 私改标题', messageSeqs: [], source: { kind: 'user' } },
+    data: { title: '本地私改标题', messageSeqs: [], source: { kind: 'user' } },
   })
   await writeFile(canonicalPath, encodeArtifact(canonical.header, canonical.events))
   const titleOnly = await execute({ apply: true, codexRoot, dshHome })
@@ -268,9 +268,9 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
     seq: canonical.events.at(-1).seq + 1,
     time: Date.now(),
     data: {
-      id: 'eac-local-message',
+      id: 'local-message',
       role: 'user',
-      content: [{ type: 'text', text: 'EAC 独立追加的对话' }],
+      content: [{ type: 'text', text: '本地独立追加的对话' }],
       source: { kind: 'user' },
     },
   })
@@ -279,11 +279,11 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
   assert.equal(diverged.counters.branched, 1)
 
   const dirs = await readdir(project)
-  const branchId = dirs.find((name) => name.startsWith(`${NODE_ID}--eac-branch-`))
+  const branchId = dirs.find((name) => name.startsWith(`${NODE_ID}--branch-`))
   assert.ok(branchId)
   const branch = decodeArtifact(await readFile(join(project, branchId, 'session.jsonl.zstd')))
   assert.equal(branch.header.id, branchId)
-  assert.match(branch.events.filter((event) => event.type === 'session/title').at(-1).data.title, /EAC 分支/)
+  assert.match(branch.events.filter((event) => event.type === 'session/title').at(-1).data.title, /分支/)
 
   const pruned = await execute({ apply: true, codexRoot, dshHome, pruneRedundantBranches: true })
   assert.equal(pruned.counters.redundantBranchesPruned, 0)
