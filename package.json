@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-session-sync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run the local Codex-to-DSH session synchronizer from a DSH slash command.",
   "type": "module",
   "main": "src/index.js",
@@ -32,22 +32,9 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-commands": "^0.1.0-rc.6"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/cordis": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-commands": {
-      "optional": true
-    }
-  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
   }
 }
-

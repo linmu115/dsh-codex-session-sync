@@ -1,0 +1,7 @@
+- insert:
+    - id: codex-session-sync
+      name: dsh-codex-session-sync
+      config:
+        eacRoot: 'D:\AI\Deepseek-Harness-EAC\Deepseek Harness EAC'
+        delaySeconds: 2
+
