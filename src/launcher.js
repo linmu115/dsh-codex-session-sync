@@ -59,7 +59,7 @@ export function createSyncLauncher({
     const helperPath = resolveHelperPath()
     const args = buildPowerShellArgs({ helperPath, dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds })
     const child = spawnImpl('powershell.exe', args, {
-      detached: true,
+      detached: false,
       stdio: 'ignore',
       windowsHide: true,
     })

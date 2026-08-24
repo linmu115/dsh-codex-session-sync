@@ -159,7 +159,7 @@ test('command rejects arguments and launches exactly once for an explicit bare i
   }])
 })
 
-test('launcher uses a detached hidden PowerShell process and enforces a cooldown', () => {
+test('launcher uses a hidden unreferenced PowerShell process and enforces a cooldown', () => {
   const spawns = []
   let unrefCount = 0
   const launch = createSyncLauncher({
@@ -184,7 +184,7 @@ test('launcher uses a detached hidden PowerShell process and enforces a cooldown
   assert.deepEqual(launch(input), { launched: false, reason: 'cooldown' })
   assert.equal(spawns.length, 1)
   assert.equal(spawns[0].command, 'powershell.exe')
-  assert.equal(spawns[0].options.detached, true)
+  assert.equal(spawns[0].options.detached, false)
   assert.equal(spawns[0].options.windowsHide, true)
   assert.equal(spawns[0].options.stdio, 'ignore')
   assert.equal(unrefCount, 1)
@@ -224,7 +224,7 @@ test('PowerShell arguments preserve paths as individual argv values', () => {
   ])
 })
 
-test('detached helper owns the stop-sync-restart lifecycle and a named mutex', async () => {
+test('PowerShell helper owns the stop-sync-restart lifecycle and a named mutex', async () => {
   const helper = await readFile(resolveHelperPath(), 'utf8')
   assert.match(helper, /DshCodexSessionSync/)
   assert.match(helper, /WaitOne\(0\)/)
