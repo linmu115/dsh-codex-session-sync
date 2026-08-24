@@ -12,6 +12,7 @@ import {
 } from '../src/index.js'
 import {
   buildPowerShellArgs,
+  buildPowerShellBootstrapArgs,
   createSyncLauncher,
   resolveHelperPath,
 } from '../src/launcher.js'
@@ -188,6 +189,35 @@ test('launcher uses a hidden unreferenced PowerShell process and enforces a cool
   assert.equal(spawns[0].options.windowsHide, true)
   assert.equal(spawns[0].options.stdio, 'ignore')
   assert.equal(unrefCount, 1)
+})
+
+test('PowerShell broker creates an independent hidden helper with encoded arguments', () => {
+  const args = buildPowerShellBootstrapArgs({
+    helperPath: resolveHelperPath(),
+    dshRoot: DSH_ROOT,
+    dshHome: DSH_HOME,
+    healthUrl: HEALTH_URL,
+    nodeExecutable: NODE_EXECUTABLE,
+    dshProcessId: DSH_PROCESS_ID,
+    delaySeconds: 2,
+  })
+  assert.deepEqual(args.slice(0, -1), [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-EncodedCommand',
+  ])
+  const broker = Buffer.from(args.at(-1), 'base64').toString('utf16le')
+  assert.match(broker, /Start-Process -FilePath 'powershell\.exe'/)
+  assert.match(broker, /-WindowStyle Hidden/)
+  const encoded = broker.match(/'([A-Za-z0-9+/=]+)'\) -WindowStyle Hidden/)?.[1]
+  assert.ok(encoded)
+  const inner = Buffer.from(encoded, 'base64').toString('utf16le')
+  assert.match(inner, /sync-and-restart\.ps1/)
+  assert.match(inner, /-DshProcessId '1234'/)
+  assert.match(inner, /-DelaySeconds '2'/)
 })
 
 test('PowerShell arguments preserve paths as individual argv values', () => {

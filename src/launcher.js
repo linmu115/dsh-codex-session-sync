@@ -40,6 +40,40 @@ export function buildPowerShellArgs({ helperPath, dshRoot, dshHome, healthUrl, n
   ]
 }
 
+function powerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`
+}
+
+function encodePowerShell(command) {
+  return Buffer.from(command, 'utf16le').toString('base64')
+}
+
+export function buildPowerShellBootstrapArgs(options) {
+  const helperArgs = buildPowerShellArgs(options)
+  const helperPath = helperArgs[6]
+  const parameterParts = []
+  for (let index = 7; index < helperArgs.length; index += 2) {
+    parameterParts.push(helperArgs[index], powerShellLiteral(helperArgs[index + 1]))
+  }
+  const innerCommand = [`& ${powerShellLiteral(helperPath)}`, ...parameterParts].join(' ')
+  const innerEncoded = encodePowerShell(innerCommand)
+  const brokerCommand = [
+    "Start-Process -FilePath 'powershell.exe'",
+    "-ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',",
+    `${powerShellLiteral(innerEncoded)})`,
+    '-WindowStyle Hidden',
+  ].join(' ')
+  return [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-EncodedCommand',
+    encodePowerShell(brokerCommand),
+  ]
+}
+
 export function createSyncLauncher({
   spawnImpl = spawn,
   platform = process.platform,
@@ -57,7 +91,7 @@ export function createSyncLauncher({
     }
 
     const helperPath = resolveHelperPath()
-    const args = buildPowerShellArgs({ helperPath, dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds })
+    const args = buildPowerShellBootstrapArgs({ helperPath, dshRoot, dshHome, healthUrl, nodeExecutable, dshProcessId, delaySeconds })
     const child = spawnImpl('powershell.exe', args, {
       detached: false,
       stdio: 'ignore',
