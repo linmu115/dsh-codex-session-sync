@@ -2,7 +2,7 @@
 
 DSH plugin wrapper for the local, UUID-aware Codex-to-DSH session synchronizer.
 
-The plugin adds a `/codex-sync` command. An explicit invocation launches a detached PowerShell helper, stops only the current official DSH process, synchronizes Codex changes into the configured `DSH_HOME`, restarts the official launcher, and checks the loopback Web UI. Loading or installing the plugin never starts synchronization.
+The plugin adds a `/codex-sync` command and a matching **同步 Codex 会话** button in `dsh-resource-management`. An explicit invocation launches a detached PowerShell helper, stops only the current official DSH process, synchronizes Codex changes into the configured `DSH_HOME`, restarts the official launcher, and checks the loopback Web UI. Loading or installing the plugin never starts synchronization.
 
 ## Safety boundary
 
@@ -25,6 +25,8 @@ Then enter the following command in a DSH chat:
 ```text
 /codex-sync
 ```
+
+Or open **插件管理 → dsh-codex-session-sync → 参数设置** and click **同步 Codex 会话**. The panel intentionally contains no persistent configuration fields: its only control is the same explicit one-shot synchronization action, with a short capability summary and inline failure feedback.
 
 The command accepts no arguments. It waits briefly so the command result can reach the browser, then official DSH restarts around the session write. A second invocation during the launch window is rejected, and the detached helper holds a named mutex for the complete stop-sync-restart lifecycle.
 

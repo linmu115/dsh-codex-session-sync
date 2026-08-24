@@ -1,0 +1,8 @@
+contractVersion: 1
+sections: []
+actions:
+  - id: sessions.sync
+    label: 同步 Codex 会话
+    description: 单向合并 Codex 的 UUID、标题和分支到官方 DSH；保留 DSH 本地新增内容与同步前备份，并在写入前后自动停止、重启及检查 DSH Web。
+    style: danger
+    confirmation: 同步期间官方 DSH 会短暂停止并自动重启，确认现在开始？

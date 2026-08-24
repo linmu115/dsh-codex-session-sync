@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
   CODEX_SYNC_COMMAND,
+  CODEX_SYNC_ACTION,
+  PACKAGE_NAME,
   apply,
+  registerCodexSyncAction,
   registerCodexSyncCommand,
 } from '../src/index.js'
 import {
@@ -22,6 +25,7 @@ const DSH_PROCESS_ID = 1234
 function createContext() {
   let command
   let dispose
+  let injected
   return {
     ctx: {
       commands: {
@@ -33,18 +37,70 @@ function createContext() {
       effect(factory) {
         dispose = factory()
       },
+      inject(dependencies, callback) {
+        injected = { dependencies, callback }
+      },
     },
     command: () => command,
     dispose: () => dispose,
+    injected: () => injected,
   }
 }
 
-test('plugin initialization only registers /codex-sync and never launches synchronization', () => {
+test('plugin initialization registers explicit entry points and never launches synchronization', () => {
   const harness = createContext()
   apply(harness.ctx, { dshRoot: DSH_ROOT, dshHome: DSH_HOME, healthUrl: HEALTH_URL })
 
   assert.equal(harness.command().name, CODEX_SYNC_COMMAND)
   assert.equal(typeof harness.dispose(), 'function')
+  assert.deepEqual(harness.injected().dependencies, ['resourceManagementActions'])
+})
+
+test('Manager action registers against the installed package and reports launch failures safely', async () => {
+  let registration
+  const effects = []
+  const ctx = {
+    resourceManagementActions: {
+      register(packageName, actionId, handler) {
+        registration = { packageName, actionId, handler }
+        return () => undefined
+      },
+    },
+    effect(factory) {
+      effects.push(factory())
+    },
+  }
+  const calls = []
+  registerCodexSyncAction(ctx, (options) => {
+    calls.push(options)
+    return { launched: false, reason: 'cooldown' }
+  }, { dshRoot: DSH_ROOT, dshHome: DSH_HOME, healthUrl: HEALTH_URL, delaySeconds: 2 })
+
+  assert.equal(registration.packageName, PACKAGE_NAME)
+  assert.equal(registration.actionId, CODEX_SYNC_ACTION)
+  assert.equal(effects.length, 1)
+  assert.deepEqual(await registration.handler(), {
+    ok: false,
+    message: '刚刚已经启动过同步，请等待 DSH 完成重启。',
+  })
+  assert.equal(calls.length, 1)
+})
+
+test('Manager action converts launcher exceptions into inline failure results', async () => {
+  let handler
+  const ctx = {
+    resourceManagementActions: {
+      register(_packageName, _actionId, nextHandler) {
+        handler = nextHandler
+        return () => undefined
+      },
+    },
+    effect(factory) {
+      factory()
+    },
+  }
+  registerCodexSyncAction(ctx, () => { throw new Error('helper missing') })
+  assert.deepEqual(await handler(), { ok: false, message: '无法启动同步：helper missing' })
 })
 
 test('command rejects arguments and launches exactly once for an explicit bare invocation', () => {
@@ -151,4 +207,5 @@ test('package does not install shadow copies of DSH host services', async () => 
   assert.equal(manifest.dependencies, undefined)
   assert.equal(manifest.peerDependencies, undefined)
   assert.equal(manifest.devDependencies, undefined)
+  assert.equal(manifest.files.includes('dsh-management'), true)
 })
