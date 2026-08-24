@@ -63,8 +63,20 @@ export function registerCodexSyncAction(ctx, launch = launchSync, config = {}) {
     PACKAGE_NAME,
     CODEX_SYNC_ACTION,
     async () => {
+      const options = launchOptions(config)
+      if (typeof ctx.resourceManagementActions.deferUntilResponse === 'function') {
+        ctx.resourceManagementActions.deferUntilResponse(() => {
+          const result = launch(options)
+          if (!result.launched) throw new Error(actionFailureMessage(result.reason))
+        })
+        return {
+          ok: true,
+          message: '同步任务已登记；当前页面收到回执后，官方 DSH 将自动重启。',
+        }
+      }
+
       try {
-        const result = launch(launchOptions(config))
+        const result = launch(options)
         if (!result.launched) {
           return { ok: false, message: actionFailureMessage(result.reason) }
         }

@@ -56,14 +56,18 @@ test('plugin initialization registers explicit entry points and never launches s
   assert.deepEqual(harness.injected().dependencies, ['resourceManagementActions'])
 })
 
-test('Manager action registers against the installed package and reports launch failures safely', async () => {
+test('Manager action acknowledges the request before launching synchronization', async () => {
   let registration
+  let deferredTask
   const effects = []
   const ctx = {
     resourceManagementActions: {
       register(packageName, actionId, handler) {
         registration = { packageName, actionId, handler }
         return () => undefined
+      },
+      deferUntilResponse(task) {
+        deferredTask = task
       },
     },
     effect(factory) {
@@ -80,13 +84,38 @@ test('Manager action registers against the installed package and reports launch 
   assert.equal(registration.actionId, CODEX_SYNC_ACTION)
   assert.equal(effects.length, 1)
   assert.deepEqual(await registration.handler(), {
-    ok: false,
-    message: '刚刚已经启动过同步，请等待 DSH 完成重启。',
+    ok: true,
+    message: '同步任务已登记；当前页面收到回执后，官方 DSH 将自动重启。',
   })
+  assert.equal(calls.length, 0)
+  assert.equal(typeof deferredTask, 'function')
+  assert.throws(() => deferredTask(), /刚刚已经启动过同步/)
   assert.equal(calls.length, 1)
 })
 
-test('Manager action converts launcher exceptions into inline failure results', async () => {
+test('Manager action leaves deferred launcher failures to the host logger', async () => {
+  let handler
+  let deferredTask
+  const ctx = {
+    resourceManagementActions: {
+      register(_packageName, _actionId, nextHandler) {
+        handler = nextHandler
+        return () => undefined
+      },
+      deferUntilResponse(task) {
+        deferredTask = task
+      },
+    },
+    effect(factory) {
+      factory()
+    },
+  }
+  registerCodexSyncAction(ctx, () => { throw new Error('helper missing') })
+  assert.equal((await handler()).ok, true)
+  assert.throws(() => deferredTask(), /helper missing/)
+})
+
+test('Manager action stays compatible with an older resource manager host', async () => {
   let handler
   const ctx = {
     resourceManagementActions: {
@@ -99,8 +128,11 @@ test('Manager action converts launcher exceptions into inline failure results', 
       factory()
     },
   }
-  registerCodexSyncAction(ctx, () => { throw new Error('helper missing') })
-  assert.deepEqual(await handler(), { ok: false, message: '无法启动同步：helper missing' })
+  registerCodexSyncAction(ctx, () => ({ launched: false, reason: 'cooldown' }))
+  assert.deepEqual(await handler(), {
+    ok: false,
+    message: '刚刚已经启动过同步，请等待 DSH 完成重启。',
+  })
 })
 
 test('command rejects arguments and launches exactly once for an explicit bare invocation', () => {

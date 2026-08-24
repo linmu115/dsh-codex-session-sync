@@ -28,7 +28,7 @@ Then enter the following command in a DSH chat:
 
 Or open **插件管理 → dsh-codex-session-sync → 参数设置** and click **同步 Codex 会话**. The panel intentionally contains no persistent configuration fields: its only control is the same explicit one-shot synchronization action, with a short capability summary and inline failure feedback.
 
-The command accepts no arguments. It waits briefly so the command result can reach the browser, then official DSH restarts around the session write. A second invocation during the launch window is rejected, and the detached helper holds a named mutex for the complete stop-sync-restart lifecycle.
+The command accepts no arguments. The Manager action first returns a complete acknowledgement to the browser and only starts the detached helper after the HTTP response has finished; official DSH then restarts around the session write. A second invocation during the launch window is rejected, and the detached helper holds a named mutex for the complete stop-sync-restart lifecycle. The slash command retains its short helper delay for compatibility with hosts that do not provide response-completion scheduling.
 
 ## Configuration
 
