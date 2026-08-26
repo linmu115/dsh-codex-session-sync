@@ -54,9 +54,21 @@ export interface SessionReadAdapter {
 
 ```ts
 export interface SessionRepository {
+  createLogicalSession(input: LogicalSession): Promise<boolean>;
+  findBinding(key: PlatformSessionKey): Promise<PlatformBinding | undefined>;
+  bindPlatformSession(input: PlatformBinding): Promise<boolean>;
+  getObservedHead(bindingId: string): Promise<ObservedHead | undefined>;
   putVersion(input: NewVersion): Promise<SessionVersionManifest>;
   recordObservation(input: ObservedHead): Promise<void>;
-  getGraph(logicalSessionId: string): Promise<VersionGraph>;
+  recordObservedVersion(input: ObservationRecord): Promise<RepositoryWriteResult>;
+  upsertMatchCandidate(input: MatchCandidate): Promise<boolean>;
+  listMatchCandidates(logicalSessionId: string): Promise<readonly MatchCandidate[]>;
+  listBindings(logicalSessionId: string): Promise<readonly PlatformBinding[]>;
+  counts(): Promise<RepositoryCounts>;
+  getGraph(logicalSessionId: string): Promise<VersionGraphData>;
+  listSessions(query: SessionQuery): Promise<Page<SessionSummary>>;
+  getGraphPage(logicalSessionId: string, cursor?: string): Promise<VersionGraphPage>;
+  listReachableObjectIds(): Promise<readonly string[]>;
   savePlan(plan: SyncPlan): Promise<void>;
   getPlan(id: string): Promise<SyncPlan | undefined>;
 }
@@ -96,7 +108,11 @@ export interface MaintenanceClient {
 
 ### 阶段一：独立只读内核
 
-详细计划：[2026-08-26-session-maintenance-phase-1-readonly-core.md](./2026-08-26-session-maintenance-phase-1-readonly-core.md)
+阶段一主索引：[2026-08-26-session-maintenance-phase-1-readonly-core.md](./2026-08-26-session-maintenance-phase-1-readonly-core.md)。为避免执行时反复加载无关任务，细节拆为三个按需读取的批次：
+
+- [P1–P4：工程、契约与领域模型](./2026-08-26-session-maintenance-phase-1-a-foundation-and-domain.md)
+- [P5–P9：存储、fixture 与只读适配器](./2026-08-26-session-maintenance-phase-1-b-store-and-adapters.md)
+- [P10–P13：发现、Engine/API 与验收](./2026-08-26-session-maintenance-phase-1-c-engine-and-acceptance.md)
 
 | ID | 可独立验收的交付物 | 规格覆盖 |
 | --- | --- | --- |
@@ -183,4 +199,4 @@ P28 -> P29 -> P30 -> P31 -> P32 -> P33 -> P34 -> P35 -> P36
 - 每任务修改/排错记录：目标新仓库 `docs/changes/DSH-SESSION-MAINTENANCE-YYYYMMDD-NNN.md`
 - 每阶段验收：目标新仓库 `docs/validation/phase-N-validation.md`
 
-阶段一的 P1 会把已确认规格、总路线和阶段一计划复制到新仓库并作为首个文档提交的一部分；后续实现只在新仓库进行。
+阶段一的 P1 会把已确认规格、总路线、阶段一主索引和三个批次计划复制到新仓库并作为首个文档提交的一部分；后续实现只在新仓库进行。
