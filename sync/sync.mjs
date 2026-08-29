@@ -173,6 +173,37 @@ export function encodeArtifact(header, events) {
   return Buffer.concat([headerFrame, eventFrame])
 }
 
+/**
+ * Convert one RC2-era imported log to the strict alpha.1 event vocabulary.
+ * Import provenance already lives in codex-oneway-sync/ledger.json; it must
+ * never be represented as a private Session event again.
+ */
+export function migrateImportedSessionEvents(events) {
+  if (!Array.isArray(events)) throw new TypeError('events must be an array')
+  const importedIndex = events.findIndex((event) => event?.type === 'session/imported')
+  if (importedIndex < 0) return { changed: false, events, provenance: null }
+  const marker = events[importedIndex]
+  if (importedIndex !== 0 || marker?.seq !== 0 || marker?.ignorable !== true) {
+    throw new Error('refusing to migrate a non-canonical session/imported marker')
+  }
+  const migrated = events.slice(1).map((event, index) => {
+    if (!event || event.seq !== index + 1) {
+      throw new Error(`refusing to migrate a non-contiguous imported log at index ${index + 1}`)
+    }
+    const next = { ...event, seq: index }
+    if (Array.isArray(event.sourceEventSeqs)) {
+      next.sourceEventSeqs = event.sourceEventSeqs.map((sourceSeq) => {
+        if (!Number.isSafeInteger(sourceSeq) || sourceSeq <= 0) {
+          throw new Error(`refusing to migrate invalid sourceEventSeq ${sourceSeq}`)
+        }
+        return sourceSeq - 1
+      })
+    }
+    return next
+  })
+  return { changed: true, events: migrated, provenance: marker.data ?? null }
+}
+
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
 }
@@ -276,9 +307,7 @@ function withoutManagedBranchTail(events) {
 }
 
 function comparableEvent(event) {
-  if (event?.type !== 'session/imported' || !event.data) return event
-  const { importedAt: _importedAt, ...data } = event.data
-  return { ...event, data }
+  return event
 }
 
 function messageText(content) {

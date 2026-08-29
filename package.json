@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-session-sync",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Synchronize local Codex sessions into an official DSH home from a DSH slash command.",
   "type": "module",
   "main": "src/index.js",
@@ -21,7 +21,8 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "check": "node --check src/index.js && node --check src/launcher.js && node --test test/*.test.mjs",
-    "pack:check": "pnpm pack --dry-run"
+    "pack:check": "pnpm pack --dry-run",
+    "migrate:alpha1": "node scripts/migrate-alpha1-sessions.mjs"
   },
   "keywords": [
     "deepseek-harness",
