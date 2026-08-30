@@ -12,6 +12,7 @@ import {
   hasNativeDialogue,
   isApprovalTranscript,
   isRedundantBranch,
+  migrateImportedSessionEvents,
   projectKey,
 } from '../sync/sync.mjs'
 
@@ -36,6 +37,23 @@ test('multi-frame artifact codec preserves header and events', () => {
   assert.equal(decoded.header.id, NODE_ID)
   assert.deepEqual(decoded.events, events)
   assert.equal(decoded.frameCount, 2)
+})
+
+test('RC2 import marker migration removes the private event and remaps seq references', () => {
+  const original = [
+    { type: 'session/imported', seq: 0, time: 1, ignorable: true, data: { tool: 'codex', sourceId: NODE_ID } },
+    { type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } },
+    { type: 'tool/call', seq: 2, time: 1, data: { callId: 'call-1' } },
+    { type: 'tool/result', seq: 3, time: 1, sourceEventSeqs: [2], data: { callId: 'call-1' } },
+  ]
+  const result = migrateImportedSessionEvents(original)
+  assert.equal(result.changed, true)
+  assert.deepEqual(result.provenance, { tool: 'codex', sourceId: NODE_ID })
+  assert.deepEqual(result.events.map((event) => [event.type, event.seq]), [
+    ['turn/start', 0], ['tool/call', 1], ['tool/result', 2],
+  ])
+  assert.deepEqual(result.events[2].sourceEventSeqs, [1])
+  assert.equal(migrateImportedSessionEvents(result.events).changed, false)
 })
 
 test('runtime end-seed markers do not count as a runtime conversation divergence', () => {
@@ -83,10 +101,9 @@ test('redundant branches are old prefixes while real native dialogue is preserve
     ...managedTail,
   ]
   const newFormat = [
-    { type: 'session/imported', seq: 0, time: 1, data: { importedAt: 123 } },
-    { type: 'user/message', seq: 1, time: 1, data: { content: [{ type: 'text', text: '同一个问题' }] } },
-    { type: 'assistant/message', seq: 2, time: 2, data: { message: { content: [{ type: 'text', text: '同一个回答' }] } } },
-    { type: 'user/message', seq: 3, time: 3, data: { content: [{ type: 'text', text: '后续问题' }] } },
+    { type: 'user/message', seq: 0, time: 1, data: { content: [{ type: 'text', text: '同一个问题' }] } },
+    { type: 'assistant/message', seq: 1, time: 2, data: { message: { content: [{ type: 'text', text: '同一个回答' }] } } },
+    { type: 'user/message', seq: 2, time: 3, data: { content: [{ type: 'text', text: '后续问题' }] } },
     ...managedTail,
   ]
   assert.equal(isRedundantBranch(oldFormat, newFormat), true)
@@ -210,6 +227,7 @@ test('one-way sync uses exact UUID/title and branches DSH divergence', async () 
   const canonicalPath = join(project, NODE_ID, 'session.jsonl.zstd')
   let canonical = decodeArtifact(await readFile(canonicalPath))
   assert.equal(canonical.header.id, NODE_ID)
+  assert.equal(canonical.events.some((event) => event.type === 'session/imported'), false)
   assert.equal(canonical.events.filter((event) => event.type === 'session/title').at(-1).data.title, 'Codex 精确标题 · 甲')
   const workspace = JSON.parse(await readFile(join(dshHome, 'storages', 'workspace.json'), 'utf8'))
   assert.equal(workspace.global.initialized, true)

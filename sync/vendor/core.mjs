@@ -42,7 +42,7 @@ export function mapContentBlock(block) {
 // 把「回合中间结构」合成平衡的 DSH 事件日志（seq 从 0 连续；surface 事件带
 // surfaceOp:'append'；tool/result 用 sourceEventSeqs 关联其 tool/call）。
 // turns: [{ prompt, steps: [{ content, toolCalls, toolResults }] }]
-// imported: 可选 { sourcePath }——index 层从工具入参 path 归一化后传入（REQ-32）。
+// imported: 可选 { sourcePath }——只用于调用方的外部账本，不写进 DSH 事件日志。
 export function synthesizeSession({ meta, turns, title, provider, model, skipped, records, imported, skippedLines = [], secrets = [], permissionCount = 0 }) {
   const events = []
   let seq = 0
@@ -68,26 +68,6 @@ export function synthesizeSession({ meta, turns, title, provider, model, skipped
     for (const s of t.steps) {
       for (const tr of s.toolResults) coveredCallIds.add(tr.toolCallId)
     }
-  }
-
-  // 内部标记（REQ-32）：本会话由哪个工具从哪个源文件导入。seq 0 钉在日志开头
-  //（首个 turn/start 之前）；ignorable: true 让读侧全链路放行（KNOWN_SESSION_EVENT_TYPES
-  // || ignorable），不依赖 SessionHeader——jsonl 后端会静默丢弃 header 附加字段。
-  // 仅 turns > 0 时写：无可导入内容不落空会话、不加标记。sourceId 用源会话 id
-  //（各源显式写入 meta.sourceId，不从 import- 前缀反解），sourcePath 由 index 层传入。
-  if (turns.length > 0) {
-    events.push({
-      type: 'session/imported',
-      seq: seq++,
-      time: meta.createdAt,
-      ignorable: true,
-      data: {
-        tool: provider,
-        sourceId: meta.sourceId ?? meta.id,
-        sourcePath: imported?.sourcePath,
-        importedAt: Date.now(),
-      },
-    })
   }
 
   for (const t of turns) {
@@ -210,8 +190,7 @@ export function synthesizeSession({ meta, turns, title, provider, model, skipped
 //
 // 轮次边界由 turn/start 事件的 data.turn 决定（不是每个事件都带 data.turn）。
 // 末尾的 session/title 事件（无 turn）默认剥离（dropSessionEvents=true）——标题只在
-// 全量导入时写一次，续写轮次不重复钉标题。位于日志头的 session/imported 标记（无
-// turn 包裹）同样不进尾部——续写不重复写导入标记（append-only 纪律）。工具结果事件
+// 全量导入时写一次，续写轮次不重复钉标题。工具结果事件
 // 的 sourceEventSeqs 重映射到尾部新 seq；指向尾部之外的引用（跨轮异步工具：调用在
 // 已导入前段、结果在新增尾部）原样保留——前段 seq 未变，旧值仍指向真实调用——并
 // 计入 droppedBoundaryResults。被保留的事件除 seq 外原样保留（surfaceOp:'append'
@@ -605,7 +584,7 @@ export function parseJsonlLines(raw, { requireObject = false } = {}) {
 // 返回 { ok, problems: [{ kind, seq, message }] }，problems 封顶
 // VALIDATION_PROBLEM_CAP 条；畸形条目（缺 seq / 非对象）以 null seq 上报。
 export const SESSION_EVENT_TYPES = [
-  'session/imported', 'session/title', 'turn/start', 'turn/end',
+  'session/title', 'turn/start', 'turn/end',
   'step/start', 'step/end', 'user/message', 'assistant/message',
   'tool/call', 'tool/result',
 ]
